@@ -4,8 +4,8 @@ on:
   issues:
     types: [opened]
   # pull_request_target, not pull_request: fork PRs get a read-only token under
-  # pull_request, so posting the greeting would 403. Safe: this job only posts a
-  # comment and never checks out PR code.
+  # pull_request, so posting the greeting would 403. The checkout below pins the
+  # repository's default branch and never executes contributor-controlled code.
   pull_request_target:
     types: [opened]
 
@@ -17,26 +17,47 @@ jobs:
   greet:
     name: Greet first-time contributors
     runs-on: ubuntu-latest
+    env:
+      ISSUE_MESSAGE: |
+        Thanks for opening your first issue in Sotto, and welcome.
+
+        A quick note on where things belong:
+
+        - A bug report or a feature idea? You are in the right place - the issue templates will guide you on what to include.
+        - A question that is not a bug? Please ask in [Discussions](https://github.com/getsotto/sotto/discussions) instead.
+        - Something security sensitive? Please report it privately per [SECURITY.md](https://github.com/getsotto/sotto/blob/main/SECURITY.md), never as a public issue.
+
+        The full contributor guide is in [CONTRIBUTING.md](https://github.com/getsotto/sotto/blob/main/CONTRIBUTING.md).
+      PR_MESSAGE: |
+        Thanks for your first pull request to Sotto, and welcome.
+
+        Two things that trip up newcomers:
+
+        - Every commit needs a `Signed-off-by` line under the Developer Certificate of Origin - PRs with unsigned commits cannot be merged. Sign off with `git commit -s`; if your branch already has unsigned commits, run `git rebase --signoff main` and push again.
+        - Please run `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` before pushing, and add tests for new behaviour (`cargo test --workspace` runs the suite).
+
+        The full guide is in [CONTRIBUTING.md](https://github.com/getsotto/sotto/blob/main/CONTRIBUTING.md) - a maintainer will review shortly.
     steps:
-      - uses: actions/first-interaction@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          issue_message: |
-            Thanks for opening your first issue in Sotto, and welcome.
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
 
-            A quick note on where things belong:
+      - name: Test greeting eligibility
+        run: node --test .github/scripts/greet-first-interaction.test.mjs
 
-            - A bug report or a feature idea? You are in the right place - the issue templates will guide you on what to include.
-            - A question that is not a bug? Please ask in [Discussions](https://github.com/getsotto/sotto/discussions) instead.
-            - Something security sensitive? Please report it privately per [SECURITY.md](https://github.com/getsotto/sotto/blob/main/SECURITY.md), never as a public issue.
-
-            The full contributor guide is in [CONTRIBUTING.md](https://github.com/getsotto/sotto/blob/main/CONTRIBUTING.md).
-          pr_message: |
-            Thanks for your first pull request to Sotto, and welcome.
-
-            Two things that trip up newcomers:
-
-            - Every commit needs a `Signed-off-by` line under the Developer Certificate of Origin - PRs with unsigned commits cannot be merged. Sign off with `git commit -s`; if your branch already has unsigned commits, run `git rebase --signoff main` and push again.
-            - Please run `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` before pushing, and add tests for new behaviour (`cargo test --workspace` runs the suite).
-
-            The full guide is in [CONTRIBUTING.md](https://github.com/getsotto/sotto/blob/main/CONTRIBUTING.md) - a maintainer will review shortly.
+      - name: Greet first interaction of this type
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const { pathToFileURL } = require('node:url');
+            const helperUrl = pathToFileURL(
+              `${process.env.GITHUB_WORKSPACE}/.github/scripts/greet-first-interaction.mjs`,
+            ).href;
+            const { greetFirstInteraction } = await import(helperUrl);
+            await greetFirstInteraction({
+              github,
+              context,
+              issueMessage: process.env.ISSUE_MESSAGE,
+              pullRequestMessage: process.env.PR_MESSAGE,
+            });
